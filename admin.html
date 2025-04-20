@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Denda Murid (Admin)</title>
+  <style>
+    /* sama persis seperti di user.html */
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Segoe UI', sans-serif; background:#f1f5f9; color:#333; }
+    header {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:20px 40px; background:#007BFF; color:#fff;
+    }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo img { width:40px; height:40px; border-radius:50%; border:2px solid #fff; }
+    header h1 { font-size:20px; }
+    header .brand { font-size:14px; opacity:0.8; }
+    .filters {
+      display:flex; gap:15px; padding:20px 40px;
+    }
+    .filters input,
+    .filters select {
+      flex:1; max-width:250px;
+      padding:10px 14px; border:1px solid #ccc; border-radius:8px;
+      background:#fff;
+    }
+    .table-container {
+      margin:0 40px 40px;
+      background:#fff; border-radius:8px; overflow:hidden;
+      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    }
+    table {
+      width:100%; border-collapse:collapse;
+    }
+    thead { background:#007BFF; color:#fff; }
+    th, td {
+      padding:16px 20px; text-align:left; border-bottom:1px solid #eee;
+    }
+    tr:last-child td { border-bottom:none; }
+    .btn {
+      display:inline-block; padding:8px 14px; border:none; border-radius:6px;
+      background:#28a745; color:#fff; cursor:pointer; transition:.3s;
+      font-size:14px;
+    }
+    .btn:hover { background:#218838; }
+    .btn.del { background:#dc3545; }
+    .btn.del:hover { background:#c82333; }
+    .btn.lunas { background:#ffc107; color:#333; }
+    .btn.lunas:hover { background:#e0a800; }
+    .popup {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,0.3);
+      backdrop-filter:blur(4px);
+      justify-content:center; align-items:center;
+    }
+    .popup-content {
+      background:#fff; padding:30px; border-radius:16px;
+      max-width:480px; width:90%;
+      box-shadow:0 20px 40px rgba(0,0,0,0.15);
+      transform:translateY(-20px); opacity:0;
+      animation:slideUp .4s forwards;
+    }
+    .popup-content h2 {
+      margin-bottom:20px; font-size:22px; color:#333;
+      border-bottom:2px solid #007BFF; padding-bottom:8px;
+    }
+    .popup-content ul {
+      list-style:none; padding:0;
+    }
+    .popup-content ul li {
+      background:#f1f5f9; margin-bottom:10px;
+      padding:10px 14px; border-radius:8px; font-size:15px;
+    }
+    .popup-close {
+      position:absolute; top:16px; right:20px;
+      font-size:22px; color:#999; cursor:pointer;
+      transition:.3s;
+    }
+    .popup-close:hover { color:#333; }
+    @keyframes slideUp {
+      from { transform:translateY(40px); opacity:0; }
+      to   { transform:translateY(0);  opacity:1; }
+    }
+    @media (max-width:768px) {
+      .filters { flex-direction:column; padding:15px 20px; }
+      .filters input, .filters select { width:100%; max-width:none; }
+      th, td { padding:12px 10px; }
+    }
+    @media (max-width:480px) {
+      header h1 { font-size:18px; }
+      .btn { padding:6px 12px; font-size:13px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <img src="https://via.placeholder.com/40.png?text=IK" alt="Logo">
+      <h1>Data Denda Murid</h1>
+    </div>
+    <div class="brand">OSIS © 2025</div>
+  </header>
+
+  <section class="filters">
+    <input id="search" type="text" placeholder="Cari nama murid..." oninput="render()">
+    <select id="kelas" onchange="render()">
+      <option value="">Semua Kelas</option>
+      <option>8A</option>
+      <option>8B</option>
+      <option>8C</option>
+    </select>
+  </section>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Nama</th>
+          <th>Kelas</th>
+          <th>Total Denda</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Popup -->
+  <div id="popup" class="popup" onclick="closePopup(event)">
+    <div class="popup-content" onclick="event.stopPropagation()">
+      <span class="popup-close" onclick="closePopup()">×</span>
+      <h2>Rincian Denda</h2>
+      <ul id="detailList"></ul>
+    </div>
+  </div>
+
+  <script>
+    if (!localStorage.getItem('murid')) {
+      const init = [
+        {nama:"Andi",kelas:"8A",total:15000,rincian:["Telat masuk kelas - Rp5.000","Tidak membawa buku - Rp10.000"], lunas:false},
+        {nama:"Sari",kelas:"8B",total:20000,rincian:["Seragam tidak lengkap - Rp10.000","Lupa PR - Rp10.000"], lunas:false},
+        {nama:"Budi",kelas:"8A",total:5000,rincian:["Terlambat upacara - Rp5.000"], lunas:false},
+        {nama:"Rina",kelas:"8C",total:10000,rincian:["Lupa PR - Rp10.000"], lunas:false}
+      ];
+      localStorage.setItem('murid', JSON.stringify(init));
+    }
+
+    function getData() {
+      return JSON.parse(localStorage.getItem('murid'));
+    }
+
+    function render() {
+      const term = document.getElementById('search').value.toLowerCase();
+      const kls  = document.getElementById('kelas').value;
+      let data = getData();
+      // filter sesuai input
+      data = data.filter(m =>
+        m.nama.toLowerCase().includes(term) &&
+        (kls === '' || m.kelas === kls)
+      );
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = data.map((m,i) => `
+        <tr>
+          <td>${m.nama}</td>
+          <td>${m.kelas}</td>
+          <td>Rp${m.total.toLocaleString()}</td>
+          <td>
+            <button class="btn" onclick="showDetail(${i})">Detail</button>
+            <button class="btn lunas" onclick="markLunas(${i})">Lunas</button>
+            <button class="btn del"   onclick="hapus(${i})">Hapus</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function showDetail(idx) {
+      const m = getData()[idx];
+      document.getElementById('detailList').innerHTML =
+        m.rincian.map(r=>`<li>${r}</li>`).join('');
+      document.getElementById('popup').style.display='flex';
+    }
+    function closePopup(e) {
+      document.getElementById('popup').style.display='none';
+    }
+
+    function markLunas(idx) {
+      const data = getData();
+      data[idx].lunas = true;
+      localStorage.setItem('murid', JSON.stringify(data));
+      render();
+    }
+    function hapus(idx) {
+      if(!confirm(`Hapus data ${getData()[idx].nama}?`)) return;
+      const data = getData();
+      data.splice(idx,1);
+      localStorage.setItem('murid', JSON.stringify(data));
+      render();
+    }
+
+    // realtime
+    window.addEventListener('storage', render);
+    window.onload = render;
+  </script>
+</body>
+</html>
