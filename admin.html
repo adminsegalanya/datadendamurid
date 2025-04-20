@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Data Denda Murid (Admin)</title>
   <style>
-    /* sama persis seperti di user.html */
+    /* tetap sama seperti sebelumnya */
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Segoe UI', sans-serif; background:#f1f5f9; color:#333; }
     header {
@@ -65,9 +65,7 @@
       margin-bottom:20px; font-size:22px; color:#333;
       border-bottom:2px solid #007BFF; padding-bottom:8px;
     }
-    .popup-content ul {
-      list-style:none; padding:0;
-    }
+    .popup-content ul { list-style:none; padding:0; }
     .popup-content ul li {
       background:#f1f5f9; margin-bottom:10px;
       padding:10px 14px; border-radius:8px; font-size:15px;
@@ -154,8 +152,9 @@
     function render() {
       const term = document.getElementById('search').value.toLowerCase();
       const kls  = document.getElementById('kelas').value;
-      let data = getData();
-      // filter sesuai input
+      // hanya tampilkan yang belum lunas
+      let data = getData().filter(m => !m.lunas);
+      // filter cari nama & kelas
       data = data.filter(m =>
         m.nama.toLowerCase().includes(term) &&
         (kls === '' || m.kelas === kls)
@@ -168,38 +167,41 @@
           <td>Rp${m.total.toLocaleString()}</td>
           <td>
             <button class="btn" onclick="showDetail(${i})">Detail</button>
-            // <button class="btn lunas" onclick="markLunas(${i})">Lunas</button>
-            <button class="btn del"   onclick="hapus(${i})">Lunas</button>
+            <button class="btn lunas" onclick="markLunas(${i})">Lunas</button>
+            <button class="btn del" onclick="hapus(${i})">Hapus</button>
           </td>
         </tr>
       `).join('');
     }
 
     function showDetail(idx) {
-      const m = getData()[idx];
+      const m = getData().filter(m => !m.lunas)[idx];
       document.getElementById('detailList').innerHTML =
         m.rincian.map(r=>`<li>${r}</li>`).join('');
       document.getElementById('popup').style.display='flex';
     }
-    function closePopup(e) {
+    function closePopup(e){
       document.getElementById('popup').style.display='none';
     }
 
     function markLunas(idx) {
-      const data = getData();
-      data[idx].lunas = true;
-      localStorage.setItem('murid', JSON.stringify(data));
-      render();
-    }
-    function hapus(idx) {
-      if(!confirm(`Hapus data ${getData()[idx].nama}?`)) return;
-      const data = getData();
-      data.splice(idx,1);
-      localStorage.setItem('murid', JSON.stringify(data));
+      const all = getData();
+      // cari index di array asli
+      const target = all.filter(m => !m.lunas)[idx];
+      target.lunas = true;
+      localStorage.setItem('murid', JSON.stringify(all));
       render();
     }
 
-    // realtime
+    function hapus(idx) {
+      if(!confirm(`Hapus data ${getData().filter(m=>!m.lunas)[idx].nama}?`)) return;
+      let all = getData();
+      const target = all.filter(m => !m.lunas)[idx];
+      all = all.filter(m => m !== target);
+      localStorage.setItem('murid', JSON.stringify(all));
+      render();
+    }
+
     window.addEventListener('storage', render);
     window.onload = render;
   </script>
