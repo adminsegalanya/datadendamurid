@@ -67,6 +67,10 @@
             background-color: #e9ecef;
             border-radius: 4px;
         }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -74,123 +78,179 @@
         <h1>Patungan Bareng ke Bogor</h1>
         
         <!-- Form Input -->
-        <form action="index.php" method="POST">
+        <form id="savingsForm">
             <div class="form-group">
                 <label for="name">Nama</label>
-                <input type="text" id="name" name="name" required>
+                <input type="text" id="name" required>
             </div>
             <div class="form-group">
                 <label for="date">Tanggal</label>
-                <input type="date" id="date" name="date" required>
+                <input type="date" id="date" required>
             </div>
             <div class="form-group">
                 <label for="amount">Jumlah Tabungan</label>
-                <select id="amount" name="amount" required>
+                <select id="amount" required>
                     <option value="10000">10.000</option>
                     <option value="6000">6.000</option>
                     <option value="2000">2.000</option>
                 </select>
             </div>
-            <button type="submit" name="add">Tambah Tabungan</button>
+            <button type="submit">Tambah Tabungan</button>
         </form>
+        <div id="error" class="error"></div>
 
-        <?php
-        $apiUrl = 'https://api.sheetbest.com/sheets/c3dec71b-f6a4-406a-8c20-e9c420dd08f0';
-
-        // Fungsi untuk mengirim request ke SheetBest
-        function sendRequest($url, $method = 'GET', $data = null) {
-            $ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-            if ($data) {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-            }
-            $response = curl_exec($ch);
-            curl_close($ch);
-            return json_decode($response, true);
-        }
-
-        // Tambah data
-        if (isset($_POST['add'])) {
-            $name = $_POST['name'];
-            $date = $_POST['date'];
-            $amount = $_POST['amount'];
-
-            // Ambil data untuk menentukan ID terakhir
-            $data = sendRequest($apiUrl);
-            $lastId = empty($data) ? 0 : max(array_column($data, 'ID'));
-
-            // Tambah entri baru
-            $newRow = [
-                'ID' => $lastId + 1,
-                'Nama' => $name,
-                'Tanggal' => $date,
-                'Jumlah' => (int)$amount
-            ];
-            sendRequest($apiUrl, 'POST', $newRow);
-        }
-
-        // Hapus data
-        if (isset($_GET['delete'])) {
-            $id = $_GET['delete'];
-            sendRequest("$apiUrl/$id", 'DELETE');
-        }
-
-        // Ambil dan kelompokkan data
-        $data = sendRequest($apiUrl);
-        $groupedData = [];
-        if (!empty($data)) {
-            foreach ($data as $row) {
-                $name = $row['Nama'];
-                if (!isset($groupedData[$name])) {
-                    $groupedData[$name] = [];
-                }
-                $groupedData[$name][] = [
-                    'id' => $row['ID'],
-                    'date' => $row['Tanggal'],
-                    'amount' => $row['Jumlah']
-                ];
-            }
-        }
-
-        // Tampilkan data per anak
-        foreach ($groupedData as $name => $savings) {
-            echo "<h2>$name</h2>";
-            echo "<table>";
-            echo "<tr><th>Tanggal</th><th>Jumlah</th><th>Aksi</th></tr>";
-            $total = 0;
-            foreach ($savings as $row) {
-                $amount = (int)$row['amount'];
-                $total += $amount;
-                echo "<tr>";
-                echo "<td>" . $row['date'] . "</td>";
-                echo "<td>Rp " . number_format($amount, 0, ',', '.') . "</td>";
-                echo "<td><a href='index.php?delete=" . $row['id'] . "' onclick='return confirm(\"Yakin hapus?\")'>Hapus</a></td>";
-                echo "</tr>";
-            }
-            echo "</table>";
-
-            // Ringkasan
-            $goal = 400000;
-            $shortage = $goal - $total;
-            echo "<div class='summary'>";
-            echo "<p><strong>Total Tabungan:</strong> Rp " . number_format($total, 0, ',', '.') . "</p>";
-            echo "<p><strong>Kekurangan:</strong> Rp " . number_format($shortage, 0, ',', '.') . "</p>";
-            echo "</div>";
-        }
-        ?>
+        <!-- Tempat menampilkan data -->
+        <div id="savingsData"></div>
     </div>
 
     <script>
-        document.querySelector('form').addEventListener('submit', function(e) {
+        const apiUrl = 'https://api.sheetbest.com/sheets/c3dec71b-f6a4-406a-8c20-e9c420dd08f0';
+        // Jika ada API key, tambahkan header di fetch:
+        // const headers = { Authorization: 'Bearer YOUR_API_KEY' };
+
+        // Fungsi untuk format Rupiah
+        function formatRupiah(amount) {
+            return 'Rp ' + Number(amount).toLocaleString('id-ID');
+        }
+
+        // Fungsi untuk menampilkan error
+        function showError(message) {
+            document.getElementById('error').textContent = message;
+        }
+
+        // Fungsi untuk mengambil data dari SheetBest
+        async function fetchData() {
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    // headers: headers // Aktifkan jika ada API key
+                });
+                if (!response.ok) throw new Error('Gagal mengambil data dari SheetBest');
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                showError('Error: ' + error.message);
+                return [];
+            }
+        }
+
+        // Fungsi untuk render data
+        async function renderData() {
+            const dataDiv = document.getElementById('savingsData');
+            dataDiv.innerHTML = '';
+            const data = await fetchData();
+
+            // Kelompokkan data berdasarkan nama
+            const groupedData = {};
+            data.forEach(row => {
+                if (!groupedData[row.Nama]) {
+                    groupedData[row.Nama] = [];
+                }
+                groupedData[row.Nama].push(row);
+            });
+
+            // Tampilkan data per nama
+            for (const nama in groupedData) {
+                const savingsForName = groupedData[nama];
+                let total = 0;
+
+                // Buat tabel
+                const table = document.createElement('table');
+                table.innerHTML = `
+                    <tr>
+                        <th>Tanggal</th>
+                        <th>Jumlah</th>
+                        <th>Aksi</th>
+                    </tr>
+                `;
+                savingsForName.forEach(row => {
+                    total += Number(row.Jumlah);
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${row.Tanggal}</td>
+                        <td>${formatRupiah(row.Jumlah)}</td>
+                        <td><a href="#" onclick="deleteEntry(${row.ID}); return false;">Hapus</a></td>
+                    `;
+                    table.appendChild(tr);
+                });
+
+                // Ringkasan
+                const goal = 400000;
+                const shortage = goal - total;
+                const summary = document.createElement('div');
+                summary.className = 'summary';
+                summary.innerHTML = `
+                    <h2>${nama}</h2>
+                    <p><strong>Total Tabungan:</strong> ${formatRupiah(total)}</p>
+                    <p><strong>Kekurangan:</strong> ${formatRupiah(shortage)}</p>
+                `;
+
+                // Tambahkan ke DOM
+                dataDiv.appendChild(summary);
+                dataDiv.appendChild(table);
+            }
+        }
+
+        // Fungsi untuk tambah data
+        document.getElementById('savingsForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
             const name = document.getElementById('name').value;
             const date = document.getElementById('date').value;
+            const amount = document.getElementById('amount').value;
+
             if (!name || !date) {
-                alert('Nama dan tanggal harus diisi!');
-                e.preventDefault();
+                showError('Nama dan tanggal harus diisi!');
+                return;
+            }
+
+            // Ambil data untuk menentukan ID terakhir
+            const data = await fetchData();
+            const lastId = data.length > 0 ? Math.max(...data.map(row => Number(row.ID))) : 0;
+
+            // Tambah entri baru
+            const newRow = {
+                ID: lastId + 1,
+                Nama: name,
+                Tanggal: date,
+                Jumlah: Number(amount)
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // 'Authorization': 'Bearer YOUR_API_KEY' // Aktifkan jika ada API key
+                    },
+                    body: JSON.stringify(newRow)
+                });
+                if (!response.ok) throw new Error('Gagal menambah data ke SheetBest');
+                document.getElementById('savingsForm').reset();
+                showError('');
+                renderData();
+            } catch (error) {
+                showError('Error: ' + error.message);
             }
         });
+
+        // Fungsi untuk hapus data
+        async function deleteEntry(id) {
+            if (confirm('Yakin hapus?')) {
+                try {
+                    const response = await fetch(`${apiUrl}/${id}`, {
+                        method: 'DELETE',
+                        // headers: headers // Aktifkan jika ada API key
+                    });
+                    if (!response.ok) throw new Error('Gagal menghapus data dari SheetBest');
+                    renderData();
+                } catch (error) {
+                    showError('Error: ' + error.message);
+                }
+            }
+        }
+
+        // Render data saat halaman dimuat
+        renderData();
     </script>
 </body>
 </html>
